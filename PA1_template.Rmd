@@ -1,25 +1,174 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
+title: 'Reproducible Research: Peer Assessment 1'
+output:
   html_document:
-    keep_md: true
+    keep_md: yes
+  pdf_document: default
 ---
 
+This R markdown file is written for the first assignment of the Coursera course "[Reproducible Research](http://www.coursera.org/course/repdata)".  
+The following steps describe the analysis step by step.
 
 ## Loading and preprocessing the data
+First, we unzip and load the data into R.
 
+```{r loading}
+unzip("activity.zip")
+activity <- read.csv("activity.csv")
 
+```
+
+So this is what the head of the imported data looks like:
+
+```{r preview, echo=FALSE}
+summary(activity)
+
+```
 
 ## What is mean total number of steps taken per day?
+To answer this question, we first calculate the total of steps for each of the days in our sample.  
 
+```{r dailysteps}
+dailysteps <- tapply(activity$steps, activity$date, sum)
 
+```
+
+Next, we visualize the distribution of this data with a histogram.  
+
+```{r histogram, echo=FALSE}
+hist(dailysteps, 
+     breaks = 10,
+     main="Histrogram of daily steps counted", 
+     xlab="Amount of steps",
+     border="azure4", 
+     col="azure3")
+```
+
+Finally, the **mean** and **median** of the total number of steps taken per day are the following:
+
+```{r distrubution}
+mean(dailysteps, na.rm=TRUE)
+median(dailysteps, na.rm=TRUE)
+
+``` 
 
 ## What is the average daily activity pattern?
 
+To understand the average daily patern we first need to calculate the average amount of steps for each interval.
 
+```{r intervalAverages}
+intervalAverages <- tapply(activity$steps, activity$interval, mean, na.rm=T)
+```
+
+An average day in the sample of 62 days looks like this:
+
+```{r timeseries, echo=FALSE}
+plot(names(intervalAverages), intervalAverages,
+     type="line",
+     main="Time series data of average steps for each interval", 
+     xlab="Interval",
+     ylab="Steps",
+     col="azure3")
+```
+
+Next we define the interval with the highest average number of steps.
+
+```{r highestInterval}
+maxSteps <- max(intervalAverages)
+maxInterval <- names(which(intervalAverages==maxSteps))
+```
+
+As you can clearly see on the plot, the 5-minute interval, on average across all the days in the dataset, which contains the maximum number of steps is interval **`r maxInterval`** with and average of **`r maxSteps`** steps.  
 
 ## Imputing missing values
+The presence of missing days may introduce bias into some calculations or summaries of the data.  
+Therefore, we calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs).  
 
+```{r countMissings}
+totalCount <- nrow(activity)
+whichAreMissing <- table(complete.cases(activity))
+completeCOunt <- as.numeric(whichAreMissing[2])
+percentageComplete <- completeCOunt/totalCount*100
+```
+
+* Total entries: `r totalCount` cases  
+* Valid entries: `r completeCOunt` cases  
+* Percentage complete: `r percentageComplete`%  
+
+For this exercise, we replace missing values by replacing them by the average value for that interval.
+
+```{r imputing}
+activity_clean <- activity
+for (i in 1:nrow(activity_clean)){
+        if(is.na(activity_clean$steps[i])==TRUE){
+                activity_clean$steps[i] <- 
+                        intervalAverages[names(intervalAverages)==activity_clean$interval[i]]
+        }
+}        
+```
+
+Next, we reexamine the distribution of the total number of steps taken each day.  
+
+```{r dailysteps_clean}
+dailysteps_clean <- tapply(activity_clean$steps, activity_clean$date, sum)
+
+```
+
+```{r histogram_clean, echo=FALSE}
+hist(dailysteps_clean, 
+     breaks = 10,
+     main="Histrogram of daily steps counted (no missing data)", 
+     xlab="Amount of steps",
+     border="azure4", 
+     col="azure3")
+```
+
+For this clean dataset, the **mean** and **median** of the total number of steps taken per day are the following:
+
+```{r distrubution_clean}
+mean(dailysteps_clean)
+median(dailysteps_clean)
+``` 
+
+These values do not (or barely) differ from the estimates from the first part of the assignment.
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+First we identify which dates are weekdays.
+
+```{r weekdaysvsweekends}
+activity_clean$date <- strptime(as.character(activity_clean$date), "%Y-%m-%e")
+activity_clean$weekday <- weekdays(activity_clean$date)
+activity_clean$isweekend <- 
+        activity_clean$weekday == unique(activity_clean$weekday)[6]|
+        activity_clean$weekday == unique(activity_clean$weekday)[7]
+activity_clean$daytype <- factor(activity_clean$isweekend, labels = c("weekday", "weekend"))
+```
+
+```{r intervalAveragesweekdays}
+activity_clean_weekdays <- activity_clean[activity_clean$day=="weekday",]
+activity_clean_weekends <- activity_clean[activity_clean$day=="weekend",]
+
+intervalAveragesWeekdays <- data.frame(
+        interval = 1:length(unique(activity_clean_weekdays$interval)),
+        daytype="weekday", 
+        steps = tapply(activity_clean_weekdays$steps, activity_clean_weekdays$interval, mean, na.rm=T))
+
+intervalAveragesWeekends <- data.frame(
+        interval = 1:length(unique(activity_clean_weekends$interval)),
+        daytype="weekend", 
+        steps = tapply(activity_clean_weekends$steps, activity_clean_weekends$interval, mean, na.rm=T))
+
+intervalMerged <- rbind(intervalAveragesWeekdays, intervalAveragesWeekends)
+```
+
+Next, we plot both weekdays and weekends to look for differences.
+
+```{r weekdaysvsweekends_plot}
+library(lattice)
+plot <- xyplot(steps ~ interval | daytype ,intervalMerged,type="l")
+print(plot)
+```
+
+
